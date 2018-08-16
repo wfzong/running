@@ -1,0 +1,1 @@
+# Jenkins的安装配置，自动化部署php项目、vue项目、vue SSR项目
