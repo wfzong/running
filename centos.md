@@ -8,12 +8,12 @@
 需要注意的是，在“系统配置”阶段，登录凭证选自定义密码，并设置好密码，后续远程登录会用到。
 
 ## centos 7 服务器的管理
-当你成功购买好服务器以后，进入控制台就可以看到主机信息，找到主机的外网IP，通过 Xshell和之前设置的密码，远程登录主机，登录后大概是这个样子：
+当你成功购买好服务器以后，进入控制台就可以看到主机信息，找到主机的外网IP，通过 Xshell和之前设置的密码，远程登录主机，登录后大概是这个样子：  
 ![服务器管理](./images/centos/01.png)  
 
 接下来我们装一些必要的软件
 - [nginx](user-content-nginx安装)
-- node
+- [node](user-content-node安装)  
 通常，我们采用最简单的yum安装:)
 
 ### nginx安装
@@ -72,4 +72,33 @@ public
   icmp-blocks: 
   rich rules: 
 ```
-如果需要这种情况，将80端口添加后，应当就能访问了。
+如果需要这种情况，将80端口添加后，应当就能访问了，至此，nginx的安装算是完成了。
+
+### node安装
+和nginx一样，采用yum安装：
+```
+#yum install nodejs
+[root@iZ2zegckpmdcwr8830w3hcZ ~]# node -v
+v6.14.3
+[root@iZ2zegckpmdcwr8830w3hcZ ~]# npm -v
+3.10.10
+```
+可以看到nodejs、npm也安装完成了。  
+可以看到node和npm的版本都比较低，安装模块n来管理nodejs版本
+```
+#npm install -g n
+#vim ~/.bash_profile
+/*
+export N_PREFIX=/usr/local #node实际安装位置
+export PATH=$N_PREFIX/bin:$PATH
+*/
+#n stable
+
+[root@iZ2zegckpmdcwr8830w3hcZ ~]# node -v
+v10.9.0
+[root@iZ2zegckpmdcwr8830w3hcZ ~]# npm -v
+6.2.0
+
+```
+
+可以看到，已经是目前最新的稳定版本了。
