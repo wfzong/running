@@ -12,8 +12,8 @@
 ![服务器管理](./images/centos/01.png)  
 
 接下来我们装一些必要的软件
-- [nginx](user-content-nginx安装)
-- [node](user-content-node安装)  
+- [nginx](#user-content-nginx安装)
+- [node](#user-content-node安装)  
 通常，我们采用最简单的yum安装:)
 
 ### nginx安装
