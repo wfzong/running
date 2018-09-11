@@ -61,6 +61,47 @@ server {
 </html>
 
 ```
-这里在浏览器里输入域名：http://test.mimei.net.cn/，可以看到：  
+这里在浏览器里输入域名：http://test.mimei.net.cn/ ，可以看到：  
 ![测试页面](./images/nginx/01.png)  
 nginx配置虚拟主机就完成了。
+
+## 反向代理
+接下来以一个实例，看反向代理的应用：
+```
+# mkdir /var/www/mimei.net.cn/test.node
+# cd /var/www/mimei.net.cn/test.node
+# vim app.js
+
+var http = require('http')
+http.createServer(function(req, res){
+        res.writeHead(200, {'Conent-type':'text/plain'})
+        res.end('Hello world from node app \n')
+}).listen(3000, '127.0.0.1')
+console.log('running at:127.0.0.1:3000')
+
+# node app.js 
+running at:127.0.0.1:3000
+```
+这是一个极简的node应用已经运行起来了，可以通过如下方式来验证，新开一个连接：
+```
+# curl 127.0.0.1:3000
+Hello world from node app 
+```
+可以看到，程序运行在3000端口，正确返回了内容。  
+由于http默认的端口是80，3000如果做为对外应用的访问接口显然不合适，而且由于centos防火墙和阿里云的安全限制，外网根本访问不到3000端口，这里反向代理就排上用场了。  
+下面来看具体的应用：
+```
+# vim /etc/nginx/vhost/mimei.net.cn-test.node.conf
+
+server {
+        listen 80;
+        server_name test.node.mimei.net.cn;
+        location / {
+                proxy_pass http://127.0.0.1:3000;
+        }
+}
+# nginx -s reload
+```
+这样就配置好了对应于域名 test.node.mimei.net.cn 的解析，将其访问代理到127.0.0.1:3000，通过浏览器访问，可以看到如下内容：  
+![node返回内容](./images/nginx/02.png)  
+至此nginx相关的内容结束
