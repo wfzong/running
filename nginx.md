@@ -66,7 +66,7 @@ server {
 nginx配置虚拟主机就完成了。
 
 ## 反向代理
-接下来以一个实例，看反向代理的应用：
+为了配置反射代理实例，做运行一个nodejs程序，然后通过nginx的反射代理，来访问这个nodejs应用：
 ```
 # mkdir /var/www/mimei.net.cn/test.node
 # cd /var/www/mimei.net.cn/test.node
@@ -88,7 +88,7 @@ running at:127.0.0.1:3000
 Hello world from node app 
 ```
 可以看到，程序运行在3000端口，正确返回了内容。  
-由于http默认的端口是80，3000如果做为对外应用的访问接口显然不合适，而且由于centos防火墙和阿里云的安全限制，外网根本访问不到3000端口，这里反向代理就排上用场了。  
+由于http默认的端口是80，3000如果作为对外应用的访问接口显然不合适，而且由于centos防火墙和阿里云的安全限制，外网根本访问不到3000端口，这里反向代理就排上用场了。  
 下面来看具体的应用：
 ```
 # vim /etc/nginx/vhost/mimei.net.cn-test.node.conf
