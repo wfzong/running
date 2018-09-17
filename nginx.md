@@ -66,7 +66,7 @@ server {
 nginx配置虚拟主机就完成了。
 
 ## 反向代理
-为了配置反射代理实例，做运行一个nodejs程序，然后通过nginx的反射代理，来访问这个nodejs应用：
+为了配置反向代理实例，先运行一个nodejs程序，然后通过nginx的反向代理，来访问这个nodejs应用：
 ```
 # mkdir /var/www/mimei.net.cn/test.node
 # cd /var/www/mimei.net.cn/test.node
