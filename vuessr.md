@@ -114,11 +114,97 @@ npm i -D babel-loader@7 babel-core babel-plugin-syntax-dynamic-import babel-pres
 │   ├── webpack.client.config.js  # 编译出 vue-ssr-client-manifest.json 文件和 js、css 等文件，供浏览器调用
 │   └── webpack.server.config.js  # 编译出 vue-ssr-server-bundle.json 供 nodejs 调用
 ```
+
+先把相关的包安装
+
 安装 webpack 相关的包
 > npm i -D webpack webpack-cli webpack-dev-middleware webpack-hot-middleware webpack-merge webpack-node-externals
 
 安装构建依赖的包
 > npm i -D chokidar cross-env friendly-errors-webpack-plugin memory-fs rimraf vue-loader
+
+接下来看每个文件的具体内容：
+> webpack.base.config.js
+``` javascript
+const path = require('path')
+const { VueLoaderPlugin } = require('vue-loader')
+
+const isProd = process.env.NODE_ENV === 'production'
+module.exports = {
+  context: path.resolve(__dirname, '../'),
+  devtool: isProd ? 'source-map' : '#cheap-module-source-map',
+  output: {
+    path: path.resolve(__dirname, '../dist'),
+    publicPath: '/dist/',
+    filename: '[name].[chunkhash].js'
+  },
+  resolve: {
+    // ...
+  },
+  module: {
+    rules: [
+      {
+        test: /\.vue$/,
+        loader: 'vue-loader',
+        options: {
+          compilerOptions: {
+            preserveWhitespace: false
+          }
+        }
+      }
+      // ...
+    ]
+  },
+  plugins: [new VueLoaderPlugin()]
+}
+```
+webpack.base.config.js 这个是通用配置，和我们之前SPA开发配置基本一样。
+
+> webpack.client.config.js
+``` javascript
+const webpack = require('webpack')
+const merge = require('webpack-merge')
+const base = require('./webpack.base.config')
+const VueSSRClientPlugin = require('vue-server-renderer/client-plugin')
+
+const config = merge(base, {
+  mode: 'development',
+  entry: {
+    app: './src/entry-client.js'
+  },
+  resolve: {},
+  plugins: [
+    new webpack.DefinePlugin({
+      'process.env.NODE_ENV': JSON.stringify(
+        process.env.NODE_ENV || 'development'
+      ),
+      'process.env.VUE_ENV': '"client"'
+    }),
+    new VueSSRClientPlugin()
+  ]
+})
+module.exports = config
+```
+webpack.client.config.js 主要完成了两个工作
+- 定义入口文件 entry-client.js
+- 通过插件 VueSSRClientPlugin 生成 `vue-ssr-client-manifest.json`
+
+这个 manifest.json 文件被 server.js 引用
+``` javascript
+const { createBundleRenderer } = require('vue-server-renderer')
+
+const template = require('fs').readFileSync('/path/to/template.html', 'utf-8')
+const serverBundle = require('/path/to/vue-ssr-server-bundle.json')
+const clientManifest = require('/path/to/vue-ssr-client-manifest.json')
+
+const renderer = createBundleRenderer(serverBundle, {
+  template,
+  clientManifest
+})
+
+```
+通过以上设置，使用代码分割特性构建后的服务器渲染的 HTML 代码，所有都是自动注入。
+
 
 至此，基本已经完成构建
 
