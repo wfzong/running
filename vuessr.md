@@ -104,8 +104,8 @@ console.log('running at: http://localhost:4001');
 npm i -D babel-loader@7 babel-core babel-plugin-syntax-dynamic-import babel-preset-env
 ```
 
-### webpack配置
-新建一个 build 文件夹，用于存放 webpack 相关的配置文件
+### webpack 配置
+新建一个 build 文件夹，用于存放 `webpack` 相关的配置文件
 ``` bash
 /
 ├── build
@@ -158,7 +158,7 @@ module.exports = {
   plugins: [new VueLoaderPlugin()]
 }
 ```
-webpack.base.config.js 这个是通用配置，和我们之前SPA开发配置基本一样。
+`webpack.base.config.js` 这个是通用配置，和我们之前SPA开发配置基本一样。
 
 > webpack.client.config.js
 ``` javascript
@@ -185,9 +185,9 @@ const config = merge(base, {
 })
 module.exports = config
 ```
-webpack.client.config.js 主要完成了两个工作
-- 定义入口文件 entry-client.js
-- 通过插件 VueSSRClientPlugin 生成 `vue-ssr-client-manifest.json`
+`webpack.client.config.js` 主要完成了两个工作
+- 定义入口文件 `entry-client.js`
+- 通过插件 `VueSSRClientPlugin` 生成 `vue-ssr-client-manifest.json`
 
 这个 manifest.json 文件被 server.js 引用
 ``` javascript
@@ -205,6 +205,48 @@ const renderer = createBundleRenderer(serverBundle, {
 ```
 通过以上设置，使用代码分割特性构建后的服务器渲染的 HTML 代码，所有都是自动注入。
 
+> webpack.server.config.js
+``` javascript
+const webpack = require('webpack')
+const merge = require('webpack-merge')
+const base = require('./webpack.base.config')
+const nodeExternals = require('webpack-node-externals') // Webpack allows you to define externals - modules that should not be bundled.
+const VueSSRServerPlugin = require('vue-server-renderer/server-plugin')
+
+module.exports = merge(base, {
+  mode: 'production',
+  target: 'node',
+  devtool: '#source-map',
+  entry: './src/entry-server.js',
+  output: {
+    filename: 'server-bundle.js',
+    libraryTarget: 'commonjs2'
+  },
+  resolve: {},
+  externals: nodeExternals({
+    whitelist: /\.css$/ // 防止将某些 import 的包(package)打包到 bundle 中，而是在运行时(runtime)再去从外部获取这些扩展依赖
+  }),
+  plugins: [
+    new webpack.DefinePlugin({
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      'process.env.VUE_ENV': '"server"'
+    }),
+    new VueSSRServerPlugin()
+  ]
+})
+
+```
+`webpack.server.config.js` 主要完成的工作是：
+- 通过 target: 'node' 告诉 webpack 编译的目录代码是 node 应用程序
+- 通过 `VueSSRServerPlugin` 插件，将代码编译成 `vue-ssr-server-bundle.json`
+
+在生成 `vue-ssr-server-bundle.json` 之后，只需将文件路径传递给 `createBundleRenderer` ，在 `server.js` 中如下实现：
+``` javascript
+const { createBundleRenderer } = require('vue-server-renderer')
+const renderer = createBundleRenderer('/path/to/vue-ssr-server-bundle.json', {
+  // ……renderer 的其他选项
+})
+```
 
 至此，基本已经完成构建
 
