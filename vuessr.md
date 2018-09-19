@@ -237,7 +237,7 @@ module.exports = merge(base, {
 
 ```
 `webpack.server.config.js` 主要完成的工作是：
-- 通过 target: 'node' 告诉 webpack 编译的目录代码是 node 应用程序
+- 通过 `target: 'node'` 告诉 webpack 编译的目录代码是 node 应用程序
 - 通过 `VueSSRServerPlugin` 插件，将代码编译成 `vue-ssr-server-bundle.json`
 
 在生成 `vue-ssr-server-bundle.json` 之后，只需将文件路径传递给 `createBundleRenderer` ，在 `server.js` 中如下实现：
@@ -259,6 +259,7 @@ const renderer = createBundleRenderer('/path/to/vue-ssr-server-bundle.json', {
 新增并完善如下文件：
 ``` bash
 /
+├── server.js # 实现长期运行的 node 程序
 ├── src
 │   ├── app.js # 新增
 │   ├── router.js # 新增 定义路由
@@ -267,31 +268,144 @@ const renderer = createBundleRenderer('/path/to/vue-ssr-server-bundle.json', {
 │   ├── entry-server.js # node程序端入口
 └── views
     └── Home.vue # 首页
+```
+接下来逐个看这些文件：
+
+> server.js
+``` javascript
+const fs = require('fs');
+const path = require('path');
+const express = require('express');
+const { createBundleRenderer } = require('vue-server-renderer');
+const devServer = require('./build/setup-dev-server')
+const resolve = file => path.resolve(__dirname, file);
+
+const isProd = process.env.NODE_ENV === 'production';
+const app = express();
+
+const serve = (path, cache) =>
+  express.static(resolve(path), {
+    maxAge: cache && isProd ? 1000 * 60 * 60 * 24 * 30 : 0
+  });
+app.use('/dist', serve('./dist', true));
+
+function createRenderer(bundle, options) {
+  return createBundleRenderer( bundle, Object.assign(options, {
+      basedir: resolve('./dist'),
+      runInNewContext: false
+    })
+  );
+}
+
+function render(req, res) {
+  const startTime = Date.now();
+  res.setHeader('Content-Type', 'text/html');
+
+  const context = {
+    title: 'SSR 测试', // default title
+    url: req.url
+  };
+  renderer.renderToString(context, (err, html) => {
+    res.send(html);
+  });
+}
+
+let renderer;
+let readyPromise;
+const templatePath = resolve('./src/index.template.html');
+
+if (isProd) {
+  const template = fs.readFileSync(templatePath, 'utf-8');
+  const bundle = require('./dist/vue-ssr-server-bundle.json');
+  const clientManifest = require('./dist/vue-ssr-client-manifest.json') // 将js文件注入到页面中
+  renderer = createRenderer(bundle, {
+    template,
+    clientManifest
+  });
+} else {
+  readyPromise = devServer( app, templatePath, (bundle, options) => {
+      renderer = createRenderer(bundle, options);
+    }
+  );
+}
+
+app.get('*',isProd? render : (req, res) => {
+        readyPromise.then(() => render(req, res));
+      }
+);
+
+const port = process.env.PORT || 8088;
+app.listen(port, () => {
+  console.log(`server started at localhost:${port}`);
+});
 
 ```
+`server.js` 主要完成了以下工作
+- 当执行 `npm run dev` 的时候，调用 `/build/setup-dev-server.js` 启动 'webpack-dev-middleware' 开发中间件
+- 通过 `vue-server-renderer` 调用之前编译生成的 `vue-ssr-server-bundle.json` 启动 node 服务
+- 将 `vue-ssr-client-manifest.json` 注入到 `createRenderer` 中实现前端资源的t自动注入
+- 通过 `express` 处理 `http` 请求
 
-编译浏览器端运行的文件 webpack.client.config.js，入口文件是　entry-client.js
+`server.js` 是整个站点的入口程序，通过他调用编译过后的文件，最终输出到页面，是整个项目中很关键的一部分
+
+> app.js
+``` javascript
+import Vue from 'vue'
+import App from './App.vue';
+import { createRouter } from './router';
+
+export function createApp(context) {
+  const router = createRouter();
+
+  const app = new Vue({
+    router,
+    render: h => h(App)
+  });
+  return { app, router };
+};
 ```
-const VueSSRClientPlugin = require('vue-server-renderer/client-plugin')
-  plugins: [
-    ...
-    new VueSSRClientPlugin() // 生成 vue-ssr-client-manifest.json
-  ]
+`app.js` 暴露一个可以重复执行的工厂函数，为每个请求创建新的应用程序实例，提交给 'entry-client.js' 和 `entry-server.js` 调用
+
+> entry-client.js
+``` javascript
+import { createApp } from './app';
+const { app, router } = createApp();
+router.onReady(() => {
+  app.$mount('#app');
+});
 ```
-编译完成后生成 vue-ssr-client-manifest.json 和一系列js,css文件，使用客户端清单(client manifest)和服务器 bundle(server bundle)，可以自动推断和注入资源预加载 / 数据预取指令(preload / prefetch directive)，以及 css 链接 / script 标签到所渲染的 HTML。
+`entry-client.js` 常规的实例化 vue 对象并挂载到页面中
 
+> entry-server.js
+```javascript
+import { createApp } from './app';
 
+export default context => {
+  // 因为有可能会是异步路由钩子函数或组件，所以我们将返回一个 Promise，
+  // 以便服务器能够等待所有的内容在渲染前，
+  // 就已经准备就绪。
+  return new Promise((resolve, reject) => {
+    const { app, router } = createApp(context);
 
-// 下面是临时存放内容
+    // 设置服务器端 router 的位置
+    router.push(context.url);
 
-``` bash
-src
-├── components
-│   ├── Foo.vue
-│   ├── Bar.vue
-│   └── Baz.vue
-├── App.vue
-├── app.js # 通用 entry(universal entry)
-├── entry-client.js # 仅运行于浏览器
-└── entry-server.js # 仅运行于服务器
+    // 等到 router 将可能的异步组件和钩子函数解析完
+    router.onReady(() => {
+      const matchedComponents = router.getMatchedComponents();
+
+      // 匹配不到的路由，执行 reject 函数，并返回 404
+      if (!matchedComponents.length) {
+        return reject({ code: 404 });
+      }
+
+      resolve(app);
+    });
+  });
+};
 ```
+`entry-server.js` 作为服务器入口，最终经过 `VueSSRServerPlugin` 插件，编译成 `vue-ssr-server-bundle.json` 供 `vue-server-renderer` 调用
+
+`router.js` 和 `Home.vue` 为常规 `vue` 程序，这里不进一步展开了。
+
+至此，我们实现了一个可以完整编译和运行的 `vue ssr` 程序
