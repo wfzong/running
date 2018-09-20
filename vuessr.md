@@ -1,5 +1,15 @@
 # 开发项目的vue ssr版本
 
+文章目录：
+- [什么是服务器端渲染(SSR)？](#user-content-什么是服务器端渲染ssr)
+- [为什么使用服务器端渲染(SSR)？](#user-content-为什么使用服务器端渲染ssr)
+- [基本用法](#user-content-基本用法)
+- [编写通用代码](#user-content-编写通用代码)
+- [构建配置](#user-content-构建配置)
+- [完成第一个可运行实例](#user-content-完成第一个可运行实例)
+- [数据预取和状态管理](#user-content-数据预取和状态管理)
+- [缓存优化](#user-content-缓存优化)
+
 ## 什么是服务器端渲染(SSR)？
 
 Vue.js 是构建客户端应用程序的框架。默认情况下，可以在浏览器中输出 Vue 组件，进行生成 DOM 和操作 DOM。然而，也可以将同一个组件渲染为服务器端的 HTML 字符串，将它们直接发送到浏览器，最后将这些静态标记"激活"为客户端上完全可交互的应用程序。
@@ -622,3 +632,35 @@ router.onReady(() => {
 通过检查匹配的组件，并在全局路由钩子函数中执行 `asyncData` 函数获取接口数据。
 
 由于这个 `demo` 是两个页面，还需要的 `router.js` 添加一个路由信息、添加一个路由组件 `Item.vue` ，至此已经完成了一个基本的 `VUE SSR` 实例。
+
+## 缓存优化
+由于服务端渲染属于计算密集型，如果并发较大的话，很有可能有性能问题。适当的使用缓存策略可以大幅提高响应速度。
+``` javascript
+const microCache = LRU({
+  max: 100,
+  maxAge: 1000 // 重要提示：条目在 1 秒后过期。
+})
+
+const isCacheable = req => {
+  // 实现逻辑为，检查请求是否是用户特定(user-specific)。
+  // 只有非用户特定(non-user-specific)页面才会缓存
+}
+
+server.get('*', (req, res) => {
+  const cacheable = isCacheable(req)
+  if (cacheable) {
+    const hit = microCache.get(req.url)
+    if (hit) {
+      return res.end(hit)
+    }
+  }
+
+  renderer.renderToString((err, html) => {
+    res.end(html)
+    if (cacheable) {
+      microCache.set(req.url, html)
+    }
+  })
+})
+```
+基本上，通过 `nginx` 和缓存，可能很大程序上解决性能瓶颈问题。
