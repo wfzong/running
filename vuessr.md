@@ -10,6 +10,22 @@
 - [数据预取和状态管理](#user-content-数据预取和状态管理)
 - [缓存优化](#user-content-缓存优化)
 
+我本人在刚开始看 VUE SSR 官方文档的时候遇到很多问题，它一开始是建立在你有一个可运行的构建环境的，所以它直接讲代码的实现，但是对于刚接触的开发者来说并没有一个运行环境，所以所有的代码片段都无法运行。那为什么作者不先讲构建，再讲程序实现呢？我觉得可能是因为构建、运行又重度依赖具体的代码实现，先讲构建也不利于理解整体过程，所以是一个不太好平衡的事。
+
+我们这个 demo 将先讲构建过程，其中有些问题可能需要在后面讲完以后回头再看，但力求能将整体过程交待清楚。同时，文章中的每一步都会在这个 [DEMO](https://github.com/wfzong/vue-ssr-minimal-demo) 有体现，通过这个 demo 的不同 commit ，可以快速定位到不同阶段，具体的 commit id 如下：
+
+``` bash
+* e06aee792a59ffd9018aea1e3601e220c37fedbd (HEAD -> master, origin/master) 优化：添加缓存
+* c65f08beaff1dea1eaf05d02fb30a7e8776ce289 程序开发：初步完成demo
+* 2fb0d28ee6d84d2b1bdbbe419c744efdad3227de 程序开发：完成store定义，api编写和程序同步
+* 9604aec0de526726f4fe435385f7c2fa4009fa63 程序开发：第一个可独立运行版本，无store
+* 7d567e254fc9dc5a1655d2f0abbb4b8d53bccfce 构建配置：webpack配置、server.js后端入口文件编写
+* 969248b64af82edd07214a621dfd19cf357d6c53 构建配置：babel 配置
+* a5453fdeb20769e8c9e9ee339b624732ad14658a 初始化项目，完成第一个可运行demo
+```
+
+在阅读、测试的时候，可以通过 `git reset --hard commitid` 来切换不同的阶段，看具体的实现。
+
 ## 什么是服务器端渲染(SSR)？
 
 Vue.js 是构建客户端应用程序的框架。默认情况下，可以在浏览器中输出 Vue 组件，进行生成 DOM 和操作 DOM。然而，也可以将同一个组件渲染为服务器端的 HTML 字符串，将它们直接发送到浏览器，最后将这些静态标记"激活"为客户端上完全可交互的应用程序。
@@ -29,7 +45,7 @@ Vue.js 是构建客户端应用程序的框架。默认情况下，可以在浏�
 安装需要用到的模板
 > npm install vue vue-server-renderer express --save
 
-新建 **/server.js** 、**/src/index.template.html**
+新建 `/server.js` 、 `/src/index.template.html`
 
 ```javascript
 const server = require('express')()
@@ -663,4 +679,4 @@ server.get('*', (req, res) => {
   })
 })
 ```
-基本上，通过 `nginx` 和缓存，可能很大程序上解决性能瓶颈问题。
+基本上，通过 `nginx` 和缓存，可能很大程度上解决性能瓶颈问题。
