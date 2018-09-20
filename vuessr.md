@@ -250,7 +250,7 @@ const renderer = createBundleRenderer('/path/to/vue-ssr-server-bundle.json', {
 
 至此，基本已经完成构建
 
-## SSR 程序开发
+## 完成第一个可运行实例
 
 安装 VUE 相关的依赖包
 
@@ -408,4 +408,217 @@ export default context => {
 
 `router.js` 和 `Home.vue` 为常规 `vue` 程序，这里不进一步展开了。
 
-至此，我们实现了一个可以完整编译和运行的 `vue ssr` 程序
+至此，我们完成了第一个可以完整编译和运行的 `vue ssr` 实例
+
+## 数据预取和状态管理
+在此之前完成的程序，只是将预想定义的变量渲染成html返回给客户端，但如果要实现一个真正可用的web程序，是要有动态数据的支持的，现在我们开始看如何从远程获取数据，然后渲染成html输出到客户端。
+
+> 在服务器端渲染(SSR)期间，我们本质上是在渲染我们应用程序的"快照"，所以如果应用程序依赖于一些异步数据，那么在开始渲染过程之前，需要先预取和解析好这些数据。
+
+### 数据预取存储容器(Data Store)
+先定义一个获取数据的 `api.js` ，使用 `axios` ：
+``` javascript 
+import axios from 'axios';
+
+export function fetchItem(id) {
+  return axios.get('https://api.mimei.net.cn/api/v1/article/' + id);
+}
+export function fetchList() {
+  return axios.get('https://api.mimei.net.cn/api/v1/article/');
+}
+```
+我们将使用官方状态管理库 Vuex。我们先创建一个 store.js 文件，里面会获取一个文件列表、根据 id 获取文章内容：
+``` javascript 
+import Vue from 'vue';
+import Vuex from 'vuex';
+import { fetchItem, fetchList } from './api.js'
+
+Vue.use(Vuex);
+
+
+export function createStore() {
+  return new Vuex.Store({
+    state: {
+      items: {},
+      list: []
+    },
+    actions: {
+      fetchItem({commit}, id) {
+        return fetchItem(id).then(res => {
+          commit('setItem', {id, item: res.data})
+        })
+      },
+      fetchList({commit}){
+        return fetchList().then(res => {
+          commit('setList', res.data.list)
+        })
+      }
+    },
+    mutations: {
+      setItem(state, {id, item}) {
+        Vue.set(state.items, id, item)
+      },
+      setList(state, list) {
+        state.list = list
+      }
+    }
+  });
+}
+```
+
+然后修改 `app.js`：
+``` javascript 
+import Vue from 'vue'
+import App from './App.vue';
+import { createRouter } from './router';
+import { createStore } from './store'
+
+import { sync } from 'vuex-router-sync'
+
+export function createApp(context) {
+  const router = createRouter();
+  const store = createStore();
+
+  sync(store, router)
+
+  const app = new Vue({
+    router,
+    store,
+    render: h => h(App)
+  });
+  return { app, router, store };
+};
+```
+
+### 带有逻辑配置的组件
+`store action` 定义好了以后，现在来看如何触发请求，官方建议是放在路由组件里，接下来看 `Home.vue` ：
+``` html
+<template>
+  <div>
+    <h3>文章列表</h3>
+    <div class="list" v-for="i in list">
+      <router-link :to="{path:'/item/'+i.id}">{{i.title}}</router-link>
+      </div>
+  </div>
+</template>
+<script>
+export default {
+  asyncData ({store, route}){
+    return store.dispatch('fetchList')
+  },
+  computed: {
+    list () {
+      return this.$store.state.list
+    }
+  },
+  data(){
+    return {
+      name:'wfz'
+    }
+  }
+}
+</script>
+```
+### 服务器端数据预取
+在 `entry-server.js` 中，我们可以通过路由获得与 `router.getMatchedComponents()` 相匹配的组件，如果组件暴露出 `asyncData`，我们就调用这个方法。然后我们需要将解析完成的状态，附加到渲染上下文(render context)中。
+``` javascript
+// entry-server.js
+import { createApp } from './app';
+
+export default context => {
+  // 因为有可能会是异步路由钩子函数或组件，所以我们将返回一个 Promise，
+  // 以便服务器能够等待所有的内容在渲染前，
+  // 就已经准备就绪。
+  return new Promise((resolve, reject) => {
+    const { app, router, store } = createApp(context);
+
+    // 设置服务器端 router 的位置
+    router.push(context.url);
+
+    // 等到 router 将可能的异步组件和钩子函数解析完
+    router.onReady(() => {
+      const matchedComponents = router.getMatchedComponents();
+
+      // 匹配不到的路由，执行 reject 函数，并返回 404
+      if (!matchedComponents.length) {
+        return reject({ code: 404 });
+      }
+
+      Promise.all(
+        matchedComponents.map(component => {
+          if (component.asyncData) {
+            return component.asyncData({
+              store,
+              route: router.currentRoute
+            });
+          }
+        })
+      ).then(() => {
+        context.state = store.state
+        // Promise 应该 resolve 应用程序实例，以便它可以渲染
+        resolve(app);
+      });
+    });
+  });
+};
+
+```
+当使用 `template` 时，`context.state` 将作为 `window.__INITIAL_STATE__` 状态，自动嵌入到最终的 HTML 中。而在客户端，在挂载到应用程序之前，store 就应该获取到状态：
+```
+// entry-client.js
+
+const { app, router, store } = createApp()
+
+if (window.__INITIAL_STATE__) {
+  store.replaceState(window.__INITIAL_STATE__)
+}
+
+```
+
+### 客户端数据预取
+
+在客户端，处理数据预取有两种不同方式：`在路由导航之前解析数据` 和 `匹配要渲染的视图后，再获取数据` ，我们的 demo 里用第一种方案：
+``` javascript 
+// entry-client.js
+import { createApp } from './app';
+const { app, router, store } = createApp();
+
+if (window.__INITIAL_STATE__) {
+  store.replaceState(window.__INITIAL_STATE__);
+}
+
+router.onReady(() => {
+  router.beforeResolve((to, from, next) => {
+    const matched = router.getMatchedComponents(to);
+    const prevMatched = router.getMatchedComponents(from);
+
+    let diffed = false;
+    const activated = matched.filter((c, i) => {
+      return diffed || (diffed = prevMatched[i] !== c);
+    });
+
+    if (!activated.length) {
+      return next();
+    }
+
+    Promise.all(
+      activated.map(component => {
+        if (component.asyncData) {
+          component.asyncData({
+            store,
+            route: to
+          });
+        }
+      })
+    )
+      .then(() => {
+        next();
+      })
+      .catch(next);
+  });
+  app.$mount('#app');
+});
+```
+通过检查匹配的组件，并在全局路由钩子函数中执行 `asyncData` 函数获取接口数据。
+
+由于这个 `demo` 是两个页面，还需要的 `router.js` 添加一个路由信息、添加一个路由组件 `Item.vue` ，至此已经完成了一个基本的 `VUE SSR` 实例。
